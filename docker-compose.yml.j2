@@ -1,0 +1,88 @@
+# docker-compose to connect to defendai
+
+version: '3.8'
+
+services:
+  owebui:
+    image: ghcr.io/open-webui/open-webui:latest
+    container_name: owebui
+    hostname: owebui
+    volumes:
+      - ./openwebui:/app/backend/data
+    depends_on:
+      - wauzeway
+    ports:
+      - 8084:3082
+    environment:
+      - PORT=3082
+      - WEBUI_AUTH=False
+      - ENABLE_SIGNUP=False
+      - OPENAI_API_KEYS={{ llm_api_key }}
+      - OPENAI_API_BASE_URLS=http://wauzeway:9080/openai/v1
+      - DEFAULT_MODELS=llama-3.1-8b-instant
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped
+
+  wauzeway:
+    image: public.ecr.aws/u1j5h7e7/aigateway:wauzeway.0.01-2
+    container_name: wauzeway
+    hostname: wauzeway
+    depends_on:
+      - etcd
+    restart: always
+    volumes:
+      - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./apisix/wauzeway_proxy.lua:/opt/apisix/plugins/wauzeway_proxy.lua:ro
+    ports:
+      - "9180:9180/tcp"
+      - "9080:9080/tcp"
+      - "9091:9091/tcp"
+      - "9443:9443/tcp"
+      - "9092:9092/tcp"
+    environment:
+      - APISIX_LISTEN_ADDRESS=unix:/tmp/runner.sock
+      - APISIX_UPSTREAM_URI=/wauzeway
+      - DEFENDAI_TENANT_ID={{ tenant_name }}
+
+  etcd:
+    image: bitnami/etcd:3.5.11
+    container_name: etcd
+    hostname: etcd
+    restart: always
+    volumes:
+      - ./etcd/data:/bitnami/etcd
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://172.17.0.1:5514"
+        tag: etcd
+    environment:
+      ETCD_ENABLE_V2: "true"
+      ALLOW_NONE_AUTHENTICATION: "yes"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+    ports:
+      - "2379:2379/tcp"
+
+  adminsvc:
+    image: public.ecr.aws/u1j5h7e7/aigateway:adminsvc.0.01-2
+    container_name: adminsvc
+    hostname: adminsvc
+    depends_on:
+      - wauzeway
+    volumes:
+      - ./adminsvc/config_script.sh:/root/adminsvc/config_script.sh
+    environment:
+      - DEFENDAI_API_KEY={{ tenant_api_key }}
+      - DEFENDAI_TENANT_ID={{ tenant_name }}
+      - GROQ_API_KEY={{ llm_api_key }}
+      - LLM_PROVIDER={{ llm_provider }}
+      - LLM_API_KEY={{ llm_api_key }}
+      - APISIX_API_KEY=edd1c9f034335f136f87ad84b625c81f
+      - APISIX_GATEWAY=wauzeway
+      - APISIX_UPSTREAM_URI=/wauzeway
+    entrypoint:
+      - /bin/bash
+      - -c
+      - "cd /root/adminsvc && chmod +x ./config_script.sh && ./config_script.sh"

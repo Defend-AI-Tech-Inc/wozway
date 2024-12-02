@@ -1,0 +1,128 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.etcd.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.etcd.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.etcd.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.etcd.name }}
+    spec:
+      containers:
+        - name: {{ .Values.etcd.name }}
+          image: {{ .Values.etcd.image }}
+          env:
+          {{- range $key, $value := .Values.etcd.env }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.etcd.containerPort }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.wauzeway.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.wauzeway.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.wauzeway.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.wauzeway.name }}
+    spec:
+      initContainers:
+        - name: wait-for-etcd
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Values.etcd.serviceName }} {{ .Values.etcd.containerPort }}; do echo "Waiting for etcd..."; sleep 5; done; sleep 5']
+      containers:
+        - name: {{ .Values.wauzeway.name }}
+          image: {{ .Values.wauzeway.image }}
+          env:
+          {{- range $key, $value := .Values.wauzeway.env }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+          {{- end }}
+          ports:
+          {{- range $port := .Values.wauzeway.containerPorts }}
+            - containerPort: {{ $port }}
+          {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.adminsvc.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.adminsvc.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.adminsvc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.adminsvc.name }}
+    spec:
+      initContainers:
+        - name: wait-for-wauzeway
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Values.wauzeway.serviceName }} {{ index .Values.wauzeway.containerPorts 0 }}; do echo "Waiting for wauzeway..."; sleep 5; done;']
+      containers:
+        - name: {{ .Values.adminsvc.name }}
+          image: {{ .Values.adminsvc.image }}
+          env:
+          {{- range $key, $value := .Values.adminsvc.env }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.adminsvc.containerPort }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.openwebui.name }}
+  labels:
+    app: {{ .Values.openwebui.name }}
+spec:
+  replicas: {{ .Values.openwebui.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.openwebui.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.openwebui.name }}
+    spec:
+      initContainers:
+        - name: wait-for-wauzeway
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z {{ .Values.wauzeway.serviceName }} {{ index .Values.wauzeway.containerPorts 0 }}; do echo "Waiting for wauzeway..."; sleep 5; done; sleep 10']
+      containers:
+        - name: {{ .Values.openwebui.name }}
+          image: {{ .Values.openwebui.image }}
+          env:
+          {{- range $key, $value := .Values.openwebui.env }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.openwebui.containerPort }}
+          volumeMounts:
+            - name: adminsvc-volume
+              mountPath: /app/backend/data
+      volumes:
+        - name: adminsvc-volume
+          emptyDir: {}

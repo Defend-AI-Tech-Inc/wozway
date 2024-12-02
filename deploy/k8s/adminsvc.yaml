@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adminsvc
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adminsvc
+  template:
+    metadata:
+      labels:
+        app: adminsvc
+    spec:
+      containers:
+        - name: adminsvc
+          image: public.ecr.aws/u1j5h7e7/aigateway:adminsvc.0.01-1
+          env:
+            - name: APISIX_API_KEY
+              value: "edd1c9f034335f136f87ad84b625c81f"
+            - name: APISIX_TENANT_ID
+              value: "1234567890"
+            - name: APISIX_GATEWAY
+              value: "wauzeway"
+            - name: GROQ_API_KEY
+              value: "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"
+            - name: APISIX_UPSTREAM_URI
+              value: "/wauzeway"
+
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-service
+  namespace: default
+spec:
+  selector:
+    app: adminsvc
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

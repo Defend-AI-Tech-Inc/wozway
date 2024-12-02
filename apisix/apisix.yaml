@@ -1,0 +1,41 @@
+routes:
+  - id: models-list-groq-id
+    uri: /openai/v1/models
+    name: list_groq_models_route
+    plugins:
+      proxy-rewrite:
+        host: api.groq.com
+        headers:
+          User-Agent: "apisix"
+    upstream:
+      type: roundrobin
+      scheme: https
+      nodes:
+        "api.groq.com:443": 1
+
+  - id: wauzeway-proxy-id
+    uri: /*
+    name: wauzeway_proxy_route
+    plugins:
+      wauzeway_proxy:
+        type: lua
+        description: "Custom plugin to proxy for wauzeway"
+        config:
+          script: /opt/apisix/plugins/wauzeway_proxy.lua
+          priority: 1001
+          us_uri: /wauzeway
+          tenant_id: "${APISIX_TENANT_ID}"
+          groq_api_key: "${GROQ_API_KEY}"
+        rejected_msg: "customize reject message: unsafe prompt or response"
+    upstream:
+      type: roundrobin
+      scheme: https
+      nodes:
+        "playground.defendai.tech:443": 1
+
+# register any plugins that we need; all others disabled
+plugins:
+  - wauzeway_proxy
+  - proxy-rewrite
+
+#END

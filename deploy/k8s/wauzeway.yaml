@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wauzeway
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wauzeway
+  template:
+    metadata:
+      labels:
+        app: wauzeway
+    spec:
+      containers:
+        - name: wauzeway
+          image: public.ecr.aws/u1j5h7e7/aigateway:wauzeway.0.01-1
+          ports:
+            - containerPort: 9180
+            - containerPort: 9080
+            - containerPort: 9091
+            - containerPort: 9443
+            - containerPort: 9092
+          env:
+            - name: APISIX_LISTEN_ADDRESS
+              value: "unix:/tmp/runner.sock"
+            - name: APISIX_UPSTREAM_URI
+              value: "/wauzeway"
+            - name: APISIX_TENANT_ID
+              value: "1234567890"
+            - name: APISIX_GATEWAY
+              value: "wauzeway"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wauzeway
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: wauzeway
+  ports:
+    - name: "9180-tcp"
+      port: 9180
+      targetPort: 9180
+      protocol: TCP
+    - name: "9080-tcp"
+      port: 9080
+      targetPort: 9080
+      protocol: TCP
+    - name: "9091-tcp"
+      port: 9091
+      targetPort: 9091
+      protocol: TCP
+    - name: "9443-tcp"
+      port: 9443
+      targetPort: 9443
+      protocol: TCP
+    - name: "9092-tcp"
+      port: 9092
+      targetPort: 9092
+      protocol: TCP

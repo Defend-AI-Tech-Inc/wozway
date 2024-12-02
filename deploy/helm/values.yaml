@@ -1,0 +1,56 @@
+namespace: default
+
+adminsvc:
+  name: adminsvc
+  serviceName: admin-service
+  replicas: 1
+  image: public.ecr.aws/u1j5h7e7/aigateway:adminsvc.0.01-1
+  containerPort: 8080
+  servicePort: 80
+  env:
+    APISIX_API_KEY: edd1c9f034335f136f87ad84b625c81f
+    APISIX_TENANT_ID: "1234567890"
+    APISIX_GATEWAY: wauzeway
+    GROQ_API_KEY: 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
+    APISIX_UPSTREAM_URI: /wauzeway
+
+etcd:
+  name: etcd
+  serviceName: etcd
+  replicas: 1
+  image: bitnami/etcd:3.5.11
+  containerPort: 2379
+  env:
+    ETCD_ENABLE_V2: "true"
+    ALLOW_NONE_AUTHENTICATION: "yes"
+    ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+    ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+
+openwebui:
+  name: open-webui
+  serviceName: open-webui-service
+  replicas: 1
+  image: ghcr.io/open-webui/open-webui:latest
+  containerPort: 8080
+  servicePort: 3082
+  serviceType: LoadBalancer
+  env:
+    WEB_AUTH: "False"
+    WEBUI_SECRET_KEY: "0987654321"
+
+wauzeway:
+  name: wauzeway
+  serviceName: wauzeway
+  replicas: 1
+  image: public.ecr.aws/u1j5h7e7/aigateway:wauzeway.0.01-1
+  containerPorts:
+    - 9180
+    - 9080
+    - 9091
+    - 9443
+    - 9092
+  env:
+    APISIX_LISTEN_ADDRESS: unix:/tmp/runner.sock
+    APISIX_UPSTREAM_URI: /wauzeway
+    APISIX_TENANT_ID: "1234567890"
+    APISIX_GATEWAY: wauzeway

@@ -1,0 +1,61 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.etcd.serviceName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: {{ .Values.etcd.name }}
+  ports:
+    - name: "{{ .Values.etcd.containerPort }}-tcp"
+      port: {{ .Values.etcd.containerPort }}
+      targetPort: {{ .Values.etcd.containerPort }}
+      protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.wauzeway.serviceName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.wauzeway.name }}
+  ports:
+  {{- range $port := .Values.wauzeway.containerPorts }}
+    - name: "{{ $port }}-tcp"
+      port: {{ $port }}
+      targetPort: {{ $port }}
+      protocol: TCP
+  {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.adminsvc.serviceName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: {{ .Values.adminsvc.name }}
+  ports:
+    - port: {{ .Values.adminsvc.servicePort }}
+      targetPort: {{ .Values.adminsvc.containerPort }}
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.openwebui.serviceName }}
+spec:
+  selector:
+    app: {{ .Values.openwebui.name }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.openwebui.servicePort }}
+      targetPort: {{ .Values.openwebui.containerPort }}
+  type: {{ .Values.openwebui.serviceType }}

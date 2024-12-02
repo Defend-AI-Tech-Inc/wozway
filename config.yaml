@@ -1,0 +1,10 @@
+# config.yaml
+
+tenant:
+  name: your_tenant_name
+  api_key: defendai_api_key
+
+llm_providers:
+  groq:
+    api_key: groq_api_key
+

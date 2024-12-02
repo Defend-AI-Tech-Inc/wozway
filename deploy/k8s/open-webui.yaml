@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui-deployment
+  labels:
+    app: open-webui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: open-webui
+  template:
+    metadata:
+      labels:
+        app: open-webui
+    spec:
+      containers:
+      - name: open-webui
+        image: ghcr.io/open-webui/open-webui:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: WEB_AUTH
+          value: "False"
+        - name: WEBUI_SECRET_KEY
+          value: "0987654321"
+        volumeMounts:
+        - name: adminsvc-volume
+          mountPath: /app/backend/data
+      volumes:
+      - name: adminsvc-volume
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui-service
+spec:
+  selector:
+    app: open-webui
+  ports:
+  - protocol: TCP
+    port: 3082
+    targetPort: 8080
+  type: LoadBalancer

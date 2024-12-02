@@ -1,0 +1,74 @@
+apisix:
+  node_listen: 9080
+  enable_admin: true
+  show_upstream_status_in_response_header: true
+  extra_lua_path: "/opt/?.lua"
+
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  admin:
+    admin_key:
+      - name: admin
+        key: edd1c9f034335f136f87ad84b625c81f
+        role: admin
+      - name: "viewer"
+        key: 4054f7cf07e344346cd3f287985e76a2
+        role: viewer
+    allow_admin:
+      - 0.0.0.0/0
+  etcd:
+    host:
+      - "http://etcd:2379"
+    prefix: "/apisix"
+    timeout: 30
+# deployment:
+#   role: data_plane
+#   role_data_plane:
+#     config_provider: yaml
+#   yaml:
+#     path: null #/usr/local/apisix/conf/apisix.yaml
+#   etcd:
+#     enable: false  # Still under 'deployment'
+
+routes:
+  - id: models-list-groq-id
+    uri: /openai/v1/models
+    name: list_groq_models_route
+    plugins:
+      proxy-rewrite:
+        host: api.groq.com
+        headers:
+          User-Agent: "apisix"
+    upstream:
+      type: roundrobin
+      scheme: https
+      nodes:
+        "api.groq.com:443": 1
+
+  - id: wauzeway-proxy-id
+    uri: /*
+    name: wauzeway_proxy_route
+    plugins:
+      wauzeway_proxy:
+        type: lua
+        description: "Custom plugin to proxy for wauzeway"
+        config:
+          script: /opt/apisix/plugins/wauzeway_proxy.lua
+          priority: 1001
+          us_uri: /wauzeway
+          tenant_id: "${DEFENDAI_TENANT_ID}"
+          api_key: "${DEFENDAI_API_KEY}"
+          groq_api_key: "${GROQ_API_KEY}"
+        rejected_msg: "customize reject message: unsafe prompt or response"
+    upstream:
+      type: roundrobin
+      scheme: https
+      nodes:
+        "playground.defendai.tech:443": 1
+
+# register any plugins that we need; all others disabled
+plugins:
+  - wauzeway_proxy
+  - proxy-rewrite
