@@ -134,9 +134,11 @@ with Wozway(
 ```
 ## UI Video Walkthrough 
 
-<video width="1080" height="720" controls>
-  <source src="defendai_overview.mp4" type="video/mp4">
-</video>
+
+
+[![Watch the video](policy.png)](https://github.com/user-attachments/assets/f5b594f0-d4a4-4b79-a51c-fcf6ceee2a65)
+
+
 
 ## Support
 
