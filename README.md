@@ -146,4 +146,4 @@ If you encounter any issues or have questions, please open an issue on the [GitH
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
