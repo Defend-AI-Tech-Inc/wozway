@@ -24,7 +24,6 @@
 <br/>
 <br/>
 
-
 This service allows developers to easily secure requests and responses between their chat apps and LLM cloud services like OpenAI, Groq, Gemini , Anthropic , Perplexity and more using policies through cloud driven UI or APIs available via the wozway sdk 
 
 ## Table of Contents
@@ -95,6 +94,11 @@ python start_tenant.py
 ```
 
 This script will ask few questions to setup the cloud account and domain . It will start local version of openwebui integrated with wozway to proxy all requests throught the cloud proxy to the LLM Provider . Prompt and Responses are intercepted based on policies configured in cloud console
+
+### Installation Video 
+
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/PZnHQ6zh5rQ/0.jpg)](https://www.youtube.com/watch?v=PZnHQ6zh5rQ)
+
 
 ## SDK Installation
 
