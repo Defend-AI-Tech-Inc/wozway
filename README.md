@@ -34,8 +34,9 @@ This service allows developers to easily secure requests and responses between t
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Configuration](#configuration)
-- [Example](#example)
+- [Developer SDK](#sdk-installation)
+- [Provision Tenant Video](#installation-video)
+- [UI Walkthrough Video](#ui-video-walkthrough) 
 - [Support](#support)
 - [License](#license)
 
@@ -95,9 +96,6 @@ python start_tenant.py
 
 This script will ask few questions to setup the cloud account and domain . It will start local version of openwebui integrated with wozway to proxy all requests throught the cloud proxy to the LLM Provider . Prompt and Responses are intercepted based on policies configured in cloud console
 
-### Installation Video 
-
-[![Watch the video](https://img.youtube.com/vi/PZnHQ6zh5rQ/0.jpg)](https://www.youtube.com/watch?v=PZnHQ6zh5rQ)
 
 
 ## SDK Installation
@@ -132,9 +130,12 @@ with Wozway(
           print(activity["prompt"])
       pass
 ```
+
+### Installation Video 
+
+[![Watch the video](https://img.youtube.com/vi/PZnHQ6zh5rQ/0.jpg)](https://www.youtube.com/watch?v=PZnHQ6zh5rQ)
+
 ## UI Video Walkthrough 
-
-
 
 [![Watch the video](policy.png)](https://github.com/user-attachments/assets/f5b594f0-d4a4-4b79-a51c-fcf6ceee2a65)
 
