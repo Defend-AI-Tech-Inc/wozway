@@ -97,7 +97,7 @@ This script will ask few questions to setup the cloud account and domain . It wi
 
 ### Installation Video 
 
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/PZnHQ6zh5rQ/0.jpg)](https://www.youtube.com/watch?v=PZnHQ6zh5rQ)
+[![Watch the video](https://img.youtube.com/vi/PZnHQ6zh5rQ/0.jpg)](https://www.youtube.com/watch?v=PZnHQ6zh5rQ)
 
 
 ## SDK Installation
@@ -132,6 +132,11 @@ with Wozway(
           print(activity["prompt"])
       pass
 ```
+## UI Video Walkthrough 
+
+<video width="1080" height="720" controls>
+  <source src="defendai_overview.mp4" type="video/mp4">
+</video>
 
 ## Support
 
