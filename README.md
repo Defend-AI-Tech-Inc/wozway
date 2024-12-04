@@ -7,8 +7,7 @@
   <a href="https://pypi.org/project/defendai-wozway">
     <img src="https://img.shields.io/pypi/v/defendai-wozway?label=PyPi&style=for-the-badge&logoColor=000000&labelColor=ececec" alt="PyPI"/>
   </a>
- 
-
+ <a href="https://docs.defendai.tech"><img src="https://img.shields.io/badge/api_docs-1.0.0-blue?color=3F51B5&style=for-the-badge&logoColor=000000&labelColor=ececec" alt="API Docs: 1.0.0"></a>
   <br/>  
   <br/>   
 </p>
@@ -130,6 +129,8 @@ with Wozway(
           print(activity["prompt"])
       pass
 ```
+
+Detailed SDK documentation can be found here [SDK Documentation](sdk/README.md)
 
 ### Installation Video 
 
