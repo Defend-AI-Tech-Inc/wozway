@@ -26,6 +26,17 @@ DEFAULT_LLM_PROVIDER="groq"
 DEFAULT_LLM_API_KEY="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"
 PLACEHOLDER_VALUES = {"your_tenant_name", "defendai_api_key", "groq_api_key"}
 
+def check_docker_running():
+    """Check if Docker Engine is running by executing 'docker info'."""
+    try:
+        subprocess.run(["docker", "info"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        logging.info("Docker Engine is running.")
+    except subprocess.CalledProcessError:
+        logging.error("Docker Engine is not running. Please start Docker and try again.")
+        sys.exit(1)
+    except FileNotFoundError:
+        logging.error("Docker is not installed on this system. Please install Docker and try again.")
+        sys.exit(1)
 
 def load_config(config_path="config.yaml"):
     """Load configuration from a YAML file, substituting defaults for placeholder values."""
@@ -596,6 +607,7 @@ def proceed_with_registration():
 
 
 def main(args):
+    check_docker_running()
     if args.dry_run:
         config_vars = {
             "tenant_name": DEFAULT_TENANT_NAME,
