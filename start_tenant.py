@@ -80,11 +80,8 @@ def load_config(config_path="config.yaml"):
 
 
 def render_template(template_path, output_path, variables, dry_run=False):
-    """Render a Jinja2 template with provided variables after coverting to all caps."""
+    """Render a Jinja2 template with provided variables."""
     logging.info("Rendering template %s to %s", template_path, output_path)
-
-    # Convert variable names to uppercase
-    #uppercased_variables = {key.upper(): value for key, value in variables.items()}
 
     env = Environment(loader=FileSystemLoader(searchpath='.'))
     template = env.get_template(template_path)
@@ -115,17 +112,12 @@ def run_docker_compose():
         spinner_thread = threading.Thread(target=spinner, args=(stop_event,))
         spinner_thread.start()
 
-        # Define the target log pattern to detect using regex for HTTP 201 status
-        # This regex searches for 'HTTP/1.1" 201' anywhere in the line
+        # Regex to detect "HTTP/1.1" 200
         target_pattern = re.compile(r'HTTP/1\.1"\s+200\b')
-
         browser_opened = False
 
         # Read the output line by line
         for line in process.stdout:
-            # Debug: Uncomment the next line to see all log lines (optional)
-            #print(line, end='')
-
             if target_pattern.search(line) and not browser_opened:
                 stop_event.set()
                 spinner_thread.join()
@@ -203,6 +195,7 @@ def generate_license_key(machine_uuid):
 
 # Function to check if an email is registered
 def check_registered_email(license_key, email_address):
+    """Check if the user’s email can be used for registration."""
     url = f"{API_BASE_URL}/check-registered-email"
     headers = {
         'Content-Type': 'application/json',
@@ -223,33 +216,12 @@ def check_registered_email(license_key, email_address):
         return None
 
 
-# Function to validate LLM key
-def validate_llm_key(license_key, llm, key):
-    url = f"{API_BASE_URL}/validate-llm-key"
-    headers = {
-        'Content-Type': 'application/json',
-        'auth-key': license_key  # Pass the license key as auth-key
-    }
-    data = {
-        'llm': llm,
-        'key': key
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            is_valid = response.json().get('response')
-            return is_valid
-        else:
-            print(f"Failed to validate LLM key. Status: {response.status_code}, Response: {response.text}")
-            return False
-    except Exception as e:
-        print(f"Error calling validate-llm-key API: {e}")
-        return False
-
-
 # Function to save registration
-def save_registration(license_key, fullname, email, metadata):
+def save_registration(license_key, fullname, email):
+    """
+    Save registration (no longer takes metadata).
+    The backend will automatically assign a default Groq key to the tenant.
+    """
     url = f"{API_BASE_URL}/save-registration"
     headers = {
         'Content-Type': 'application/json',
@@ -257,8 +229,7 @@ def save_registration(license_key, fullname, email, metadata):
     }
     data = {
         'fullname': fullname,
-        'email': email,
-        'metadata': metadata
+        'email': email
     }
     
     try:
@@ -274,7 +245,6 @@ def save_registration(license_key, fullname, email, metadata):
                 print("Registration failed: vguid not found in the response.")
                 return None
         else:
-            # Print Registration failed with error
             print(f"Registration failed. Status: {response.status_code}, Response: {response.text}")
             return None
     except Exception as e:
@@ -282,6 +252,11 @@ def save_registration(license_key, fullname, email, metadata):
         return None
 
 def verify_otp(vguid, otp):
+    """
+    Verify the OTP. 
+    The response now includes tenant_id, api_key, llm_key, and llm_provider, 
+    which will be used automatically in the docker-compose environment.
+    """
     url = f"{API_BASE_URL}/verify_otp"
     headers = {
         'Content-Type': 'application/json'
@@ -294,17 +269,20 @@ def verify_otp(vguid, otp):
             response_data = response.json()
             tenant_id = response_data.get('tenant_id')
             api_key = response_data.get('api_key')
-            if tenant_id and api_key:
-                return tenant_id, api_key
+            llm_key = response_data.get('llm_key')
+            llm_provider = response_data.get('llm_provider')
+            if tenant_id and api_key and llm_key and llm_provider:
+                return tenant_id, api_key, llm_key, llm_provider
             else:
-                print("Failed to retrieve tenant_id and api_key from verify_otp response.")
-                return None, None
+                print("Failed to retrieve tenant_id, api_key, llm_key, or llm_provider from verify_otp response.")
+                return None, None, None, None
         else:
             print(f"OTP verification failed. Status: {response.status_code}, Response: {response.text}")
-            return None, None
+            return None, None, None, None
     except Exception as e:
         print(f"Error calling verify_otp API: {e}")
-        return None, None
+        return None, None, None, None
+
 # Function to resend OTP
 def resend_otp(vguid):
     url = f"{API_BASE_URL}/resend_otp"
@@ -338,10 +316,10 @@ def spinner(stop_event):
         time.sleep(0.1)
     sys.stdout.write('\rDefendAI build complete!     \n')
 
-
 def exec_wauzeway(config_vars):
-    # use config_vars to render docker-compose.yml
-    print(config_vars)
+    """Use config_vars to render docker-compose.yml and then run docker-compose up."""
+    logging.info("Rendering docker-compose and running Docker with:")
+    logging.info(config_vars)
 
     # Render the template and create docker-compose.yml
     render_template("docker-compose.yml.j2", "docker-compose.yml", config_vars)
@@ -364,200 +342,120 @@ def proceed_with_registration():
 
     while True:
         # Collect user information
+        print("--- New Registration ---")
+
+        # Step 3: Prompt for Email Address
         while True:
-            print("--- New Registration ---")
+            email_address = input("Enter your email address (or type 'exit' to quit): ").strip()
+            prompt_exit(email_address)
 
-            # Step 3: Prompt for Email Address
-            while True:
-                email_address = input("Enter your email address (or type 'exit' to quit): ").strip()
-                prompt_exit(email_address)
+            if not email_address:
+                print("Email address is required. Please try again.")
+                continue
 
-                if not email_address:
-                    print("Email address is required. Please try again.")
-                    continue
+            # Check if the email is available for registration
+            registered = check_registered_email(license_key, email_address)
+            if registered is None:
+                print("Unable to verify email registration status. Please try again later.")
+                continue
+            elif registered:
+                print(f"Email '{email_address}' is available for registration.")
+                break
+            else:
+                print(f"Email '{email_address}' is already registered. Please enter a different email or contact support at info@defendai.tech.")
+                continue
 
-                # Check if the email is available for registration
-                registered = check_registered_email(license_key, email_address)
-                if registered is None:
-                    print("Unable to verify email registration status. Please try again later.")
-                    continue
-                elif registered:
-                    print(f"Email '{email_address}' is available for registration.")
-                    break
-                else:
-                    print(f"Email '{email_address}' is already registered. Please enter a different email or contact support at info@defendai.tech.")
-                    continue
+        # Step 4: Prompt for Full Name
+        while True:
+            fullname = input("Enter your full name (or type 'exit' to quit): ").strip()
+            prompt_exit(fullname)
 
-            # Step 4: Prompt for Full Name
-            while True:
-                fullname = input("Enter your full name (or type 'exit' to quit): ").strip()
-                prompt_exit(fullname)
+            if not fullname:
+                print("Full name is required. Please try again.")
+                continue
+            else:
+                break
 
-                if not fullname:
-                    print("Full name is required. Please try again.")
-                    continue
-                else:
-                    break
+        # Display all collected information
+        print("\nPlease review your information:")
+        print(f"Email address: {email_address}")
+        print(f"Full name: {fullname}")
 
-            # Step 5: Prompt for LLM Choice
-            while True:
-                print("Please select an option for your LLM license key:")
-                print("1. groq")
-                print("2. openai")
-                llm_choice_input = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
-                prompt_exit(llm_choice_input)
+        # Ask user to proceed or edit information
+        while True:
+            print("\nPlease select an option:")
+            print("1. Proceed")
+            print("2. Edit information")
+            proceed_choice = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
+            prompt_exit(proceed_choice)
 
-                if llm_choice_input == '1':
-                    llm_choice = 'groq'
-                    break
-                elif llm_choice_input == '2':
-                    llm_choice = 'openai'
-                    break
-                else:
-                    print("Invalid input. Please enter '1' or '2'.")
-                    continue
+            if proceed_choice == '1':
+                # Proceed with registration
+                break
+            elif proceed_choice == '2':
+                # Allow user to edit
+                while True:
+                    print("\nWhich information would you like to edit?")
+                    print("1. Email address")
+                    print("2. Full name")
+                    edit_choice = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
+                    prompt_exit(edit_choice)
 
-            # Step 6: Prompt for LLM API Key
-            while True:
-                llm_key = input(f"Enter your {llm_choice} API key (or type 'exit' to quit): ").strip()
-                prompt_exit(llm_key)
+                    if edit_choice == '1':
+                        while True:
+                            email_address = input("Enter your email address (or type 'exit' to quit): ").strip()
+                            prompt_exit(email_address)
 
-                if not llm_key:
-                    print("API key is required. Please try again.")
-                    continue
+                            if not email_address:
+                                print("Email address is required. Please try again.")
+                                continue
 
-                # Validate the LLM key
-                is_valid = validate_llm_key(license_key, llm_choice, llm_key)
-                if is_valid:
-                    print(f"Your {llm_choice.capitalize()} API key is valid!")
-                    break
-                else:
-                    print(f"Invalid {llm_choice} API key. Please enter a valid key.")
-                    continue
+                            # Check if the email is available for registration
+                            registered = check_registered_email(license_key, email_address)
+                            if registered is None:
+                                print("Unable to verify email registration status. Please try again later.")
+                                continue
+                            elif registered:
+                                print(f"Email '{email_address}' is available for registration.")
+                                break
+                            else:
+                                print(f"Email '{email_address}' is already registered. Please enter a different email or contact support.")
+                                continue
+                        break
+                    elif edit_choice == '2':
+                        while True:
+                            fullname = input("Enter your full name (or type 'exit' to quit): ").strip()
+                            prompt_exit(fullname)
 
-            # Display all collected information
-            print("\nPlease review all of your information to make sure it is valid:")
-            print(f"Email address: {email_address}")
-            print(f"Full name: {fullname}")
-            print(f"LLM selection: {llm_choice}")
-            print(f"LLM key: {llm_key}")
+                            if not fullname:
+                                print("Full name is required. Please try again.")
+                                continue
+                            else:
+                                break
+                        break
+                    else:
+                        print("Invalid input. Please enter '1' or '2'.")
+                        continue
+                # After editing, show info again, allow user to proceed or edit more
+                continue
+            else:
+                print("Invalid input. Please enter '1' or '2'.")
+                continue
 
-            # Ask user to proceed or edit information
-            while True:
-                print("\nPlease select an option:")
-                print("1. Proceed")
-                print("2. Edit information")
-                proceed_choice = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
-                prompt_exit(proceed_choice)
-
-                if proceed_choice == '1':
-                    # Proceed with registration
-                    break  # Exit the inner loop
-                elif proceed_choice == '2':
-                    # Allow user to edit information
-                    # Provide options to edit specific fields
-                    while True:
-                        print("\nWhich information would you like to edit?")
-                        print("1. Email address")
-                        print("2. Full name")
-                        print("3. LLM selection and key")
-                        edit_choice = input("Enter 1, 2, or 3 (or 'exit' to quit): ").strip()
-                        prompt_exit(edit_choice)
-
-                        if edit_choice == '1':
-                            # Re-prompt for email address
-                            while True:
-                                email_address = input("Enter your email address (or type 'exit' to quit): ").strip()
-                                prompt_exit(email_address)
-
-                                if not email_address:
-                                    print("Email address is required. Please try again.")
-                                    continue
-
-                                # Check if the email is available for registration
-                                registered = check_registered_email(license_key, email_address)
-                                if registered is None:
-                                    print("Unable to verify email registration status. Please try again later.")
-                                    continue
-                                elif registered:
-                                    print(f"Email '{email_address}' is available for registration.")
-                                    break
-                                else:
-                                    print(f"Email '{email_address}' is already registered. Please enter a different email or contact support at info@defendai.tech.")
-                                    continue
-                            break  # Exit edit_choice loop
-                        elif edit_choice == '2':
-                            # Re-prompt for full name
-                            while True:
-                                fullname = input("Enter your full name (or type 'exit' to quit): ").strip()
-                                prompt_exit(fullname)
-
-                                if not fullname:
-                                    print("Full name is required. Please try again.")
-                                    continue
-                                else:
-                                    break
-                            break  # Exit edit_choice loop
-                        elif edit_choice == '3':
-                            # Re-prompt for LLM selection and key
-                            while True:
-                                print("Please select an option for your LLM license key:")
-                                print("1. groq")
-                                print("2. openai")
-                                llm_choice_input = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
-                                prompt_exit(llm_choice_input)
-
-                                if llm_choice_input == '1':
-                                    llm_choice = 'groq'
-                                    break
-                                elif llm_choice_input == '2':
-                                    llm_choice = 'openai'
-                                    break
-                                else:
-                                    print("Invalid input. Please enter '1' or '2'.")
-                                    continue
-
-                            while True:
-                                llm_key = input(f"Enter your {llm_choice} API key (or type 'exit' to quit): ").strip()
-                                prompt_exit(llm_key)
-
-                                if not llm_key:
-                                    print("API key is required. Please try again.")
-                                    continue
-
-                                # Validate the LLM key
-                                is_valid = validate_llm_key(license_key, llm_choice, llm_key)
-                                if is_valid:
-                                    print(f"Your {llm_choice.capitalize()} API key is valid!")
-                                    break
-                                else:
-                                    print(f"Invalid {llm_choice} API key. Please enter a valid key.")
-                                    continue
-                            break  # Exit edit_choice loop
-                        else:
-                            print("Invalid input. Please enter '1', '2', or '3'.")
-                            continue
-
-                    # After editing, display the information again and ask to proceed or edit
-                    continue  # Go back to the outer loop to display information again
-                else:
-                    print("Invalid input. Please enter '1' or '2'.")
-                    continue
-            # If we reach here, user chose to proceed
-            break  # Exit the outermost loop
-
-        # Proceed with registration
-        metadata = {
-            'llm': llm_choice,
-            'api_key': llm_key
-        }
-        vguid = save_registration(license_key, fullname, email_address, metadata)
+        # If we reach here, user chose to proceed
+        # Step 5: Save registration (API no longer takes metadata)
+        vguid = save_registration(license_key, fullname, email_address)
         if not vguid:
             print("Registration failed. Please try again.")
-            continue  # Go back to the beginning to start over or exit
+            continue  # Go back to start
 
-        # Handle OTP verification
+        # Step 6: Verify OTP
         otp_verified = False
+        tenant_name = None
+        tenant_api_key = None
+        llm_key = None
+        llm_provider = None
+
         while not otp_verified:
             print("\nOTP expires in 1 hour.")
             otp_input = input("Please enter the one-time password sent to your email or enter '1' to resend OTP (or 'exit' to quit): ").strip()
@@ -567,24 +465,26 @@ def proceed_with_registration():
                 resend_otp(vguid)
             else:
                 # Try to verify OTP
-                tenant_id, api_key = verify_otp(vguid, otp_input)
-                if tenant_id and api_key:
-                    print("Success, your account is now verified. Enjoy using defendai.")
-                    # Set tenant_name and tenant_api_key
+                tenant_id, api_key, assigned_llm_key, assigned_llm_provider = verify_otp(vguid, otp_input)
+                if tenant_id and api_key and assigned_llm_key and assigned_llm_provider:
+                    print("Success, your account is now verified. Enjoy using DefendAI.")
+                    # set tenant_name, tenant_api_key, llm_provider, llm_api_key
                     tenant_name = tenant_id
                     tenant_api_key = api_key
+                    llm_provider = assigned_llm_provider
+                    llm_key = assigned_llm_key
                     otp_verified = True
                 else:
                     print("Invalid OTP. Please try again.")
 
-        # If OTP is verified, break the registration loop
         if otp_verified:
             break
 
+    # Build config_vars for docker compose
     config_vars = {
         "tenant_name": tenant_name,
         "tenant_api_key": tenant_api_key,
-        "llm_provider": llm_choice,
+        "llm_provider": llm_provider,
         "llm_api_key": llm_key
     }
 
@@ -595,7 +495,7 @@ def proceed_with_registration():
             "api_key": tenant_api_key
         },
         "llm_providers": {
-            llm_choice: {
+            llm_provider: {
                 "api_key": llm_key
             }
         }
@@ -649,9 +549,19 @@ def main(args):
 
 if __name__ == "__main__":
     # Argument parser for --config and --dry-run options
-    parser = argparse.ArgumentParser(description="Onboard to DefendAI and run wauzeway docker compose with optional dry-run and run from config file without registration.")
-    parser.add_argument("--config", required=False, help="Path to the configuration YAML file to run from saved config without new registration.")
-    parser.add_argument("--dry-run", action="store_true", help="Only display the generated docker-compose.yml without running it")
+    parser = argparse.ArgumentParser(
+        description="Onboard to DefendAI and run wauzeway docker compose with optional dry-run or config file."
+    )
+    parser.add_argument(
+        "--config", 
+        required=False, 
+        help="Path to the configuration YAML file to run from saved config without new registration."
+    )
+    parser.add_argument(
+        "--dry-run", 
+        action="store_true", 
+        help="Only display the generated docker-compose.yml without running it"
+    )
     args = parser.parse_args()
 
     try:
