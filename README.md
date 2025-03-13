@@ -46,9 +46,32 @@ from defendai_wozway import Wozway
 import os
 api_key = "YOUR_OPENAI_KEY"
 client = Wozway.Client(api_key=api_key,base_url="https://dev.defendai.tech")
-policies = ['Compliance', 'PROMPT', ['PII','GDPR'],'AlERT' , 'gpt-4o' , 'CopilotApp']
-policies.append(['Security' ,'PROMPT', ['Malware','Phishing'],'BLOCK'] , 'deepseek-r1' ,'Global')
-policies.append(['Privacy' ,'RESPONSE', ['SSN'],'ANONYMIZE'], 'claude-sonet-3.7' ,'StockAgent')
+policies = [
+    {
+        "policy_type": "Compliance",
+        "direction": "PROMPT",
+        "attributes": ["PII", "GDPR"],
+        "action": "ALERT",
+        "model": "gpt-4o",
+        "app": "CopilotApp"
+    },
+    {
+        "policy_type": "Security",
+        "direction": "PROMPT",
+        "attributes": ["Malware", "Phishing"],
+        "action": "BLOCK",
+        "model": "deepseek-r1",
+        "app": "Global"
+    },
+    {
+        "policy_type": "Privacy",
+        "direction": "RESPONSE",
+        "attributes": ["SSN"],
+        "action": "ANONYMIZE",
+        "model": "claude-sonet-3.7",
+        "app": "StockAgent"
+    }
+]
 client.apply(policies)
 
 ```
