@@ -39,7 +39,7 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message["content"])
 ```
-Easily Add policies to Block/Alert/Anonymize
+Easily Add policies to Block/Alert/Anonymize Prompts or Responses by App and LLM Model
 
 ```python 
 from defendai_wozway import Wozway
