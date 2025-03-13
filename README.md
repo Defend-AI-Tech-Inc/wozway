@@ -23,7 +23,7 @@
 <br/>
 <br/>
 
-Integrate quickly using existing openai compatible chat completions api by just changing base 
+Integrate quickly using existing openai compatible chat completions api by just changing base url
 ```python
 import openai
 
