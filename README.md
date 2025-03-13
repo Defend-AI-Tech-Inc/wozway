@@ -23,6 +23,35 @@
 <br/>
 <br/>
 
+Integrate quickly using existing openai compatible chat completions api by just changing base 
+```python
+import openai
+
+api_key = "YOUR_OPENAI_KEY"
+client = openai.OpenAI(api_key=api_key,base_url="https://dev.defendai.tech")
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Is this valid SSN 123-45-6789 ?"}
+    ],
+    stream=False
+)
+print(response.choices[0].message["content"])
+```
+Easily Add policies to Block/Alert/Anonymize
+
+```python 
+from defendai_wozway import Wozway
+import os
+api_key = "YOUR_OPENAI_KEY"
+client = Wozway.Client(api_key=api_key,base_url="https://dev.defendai.tech")
+policies = ['Compliance', 'PROMPT', ['PII','GDPR'],'AlERT']
+policies.append(['Security' ,'PROMPT', ['Malware','Phishing'],'BLOCK'])
+policies.append(['Privacy' ,'RESPONSE', ['SSN'],'ANONYMIZE'])
+client.apply(policies)
+
+```
 This service allows developers to easily secure requests and responses between their chat apps and LLM cloud services like OpenAI, Groq, Gemini , Anthropic , Perplexity and more using policies through cloud driven UI or APIs available via the wozway sdk 
 
 ## Table of Contents
