@@ -66,7 +66,7 @@ routes:
       type: roundrobin
       scheme: https
       nodes:
-        "playground.defendai.tech:443": 1
+        "migration.chatrayz.com:443": 1
 
 # register any plugins that we need; all others disabled
 plugins:
