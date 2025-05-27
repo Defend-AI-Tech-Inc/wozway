@@ -31,7 +31,7 @@ routes:
       type: roundrobin
       scheme: https
       nodes:
-        "migration.chatrayz.com:443": 1
+        "wauzeway.defendai.tech:443": 1
 
 # register any plugins that we need; all others disabled
 plugins:

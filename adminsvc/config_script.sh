@@ -48,10 +48,28 @@ curl "http://${APISIX_GATEWAY}:9180/apisix/admin/routes/wauzeway-proxy-id" \
     "upstream": {
         "type": "roundrobin",
         "scheme": "https",
+        "pass_host": "rewrite",
+        "upstream_host": "wauzeway.defendai.tech",
         "nodes": {
             "wauzeway.defendai.tech:443": 1
         }
     }
 }'
+curl "http://${APISIX_GATEWAY}:9180/apisix/admin/routes/wauzeway-direct" \
+  -H "X-API-KEY: ${APISIX_API_KEY}" \
+  -X PUT -d '{
+    "uri": "/wauzeway",
+    "methods": ["POST"],
+    "upstream": {
+      "type": "roundrobin",
+      "scheme": "https",
+      "pass_host": "rewrite",
+      "upstream_host": "wauzeway.defendai.tech",
+      "nodes": {
+        "wauzeway.defendai.tech:443": 1
+      }
+    }
+  }'
+
 
 tail -f /dev/null
