@@ -37,13 +37,45 @@ def check_docker_running():
     except FileNotFoundError:
         logging.error("Docker is not installed on this system. Please install Docker and try again.")
         sys.exit(1)
+def ecr_login():
+    """Log into AWS Public ECR to prevent token expiration issues."""
+    try:
+        # Run AWS CLI command to get login password and pipe it to docker login
+        login_command = (
+            "aws ecr-public get-login-password --region us-east-1 | "
+            "docker login --username AWS --password-stdin public.ecr.aws/u1j5h7e7"
+        )
+        result = subprocess.run(
+            login_command,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            logging.info("Successfully logged into AWS Public ECR.")
+        else:
+            logging.error("Failed to log into AWS Public ECR:\n%s", result.stderr)
+            print("Error: Unable to log into ECR. Ensure AWS CLI is configured and you have access.")
+            sys.exit(1)
+    except Exception as e:
+        logging.error("Error during ECR login: %s", str(e))
+        sys.exit(1)
 
 def load_config(config_path="config.yaml"):
     """Load configuration from a YAML file, substituting defaults for placeholder values."""
     logging.info("Loading configuration from %s", config_path)
 
-    with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
+    try:
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+    except FileNotFoundError:
+        logging.error("Configuration file %s not found", config_path)
+        raise
+    except yaml.YAMLError as e:
+        logging.error("Error parsing YAML configuration file %s: %s", config_path, e)
+        raise
 
     # Load or substitute tenant configuration
     tenant_name = config.get("tenant", {}).get("name", DEFAULT_TENANT_NAME)
@@ -56,10 +88,16 @@ def load_config(config_path="config.yaml"):
         logging.warning("Using default tenant API key due to placeholder value")
         tenant_api_key = DEFAULT_TENANT_API_KEY
 
-    # Load or substitute LLM provider configuration
+    # Load or substitute LLM provider configuration (supports both old and new formats)
     llm_providers = config.get("llm_providers", {})
-    llm_provider = next(iter(llm_providers.keys()), DEFAULT_LLM_PROVIDER)
-    llm_api_key = llm_providers.get(llm_provider, {}).get("api_key", DEFAULT_LLM_API_KEY)
+    if llm_providers:
+        llm_provider = next(iter(llm_providers.keys()), DEFAULT_LLM_PROVIDER)
+        llm_api_key = llm_providers.get(llm_provider, {}).get("api_key", DEFAULT_LLM_API_KEY)
+    else:
+        # Fallback for configurations without llm_providers section
+        logging.warning("No LLM providers found in configuration, using defaults")
+        llm_provider = DEFAULT_LLM_PROVIDER
+        llm_api_key = DEFAULT_LLM_API_KEY
 
     if llm_provider in PLACEHOLDER_VALUES:
         logging.warning("Using default LLM provider due to placeholder value")
@@ -75,7 +113,7 @@ def load_config(config_path="config.yaml"):
         "llm_api_key": llm_api_key
     }
 
-    logging.info("Configuration loaded: %s", config_data)
+    logging.info("Configuration loaded successfully")
     return config_data
 
 
@@ -223,29 +261,7 @@ def check_registered_email(license_key, email_address):
         return None
 
 
-# Function to validate LLM key
-def validate_llm_key(license_key, llm, key):
-    url = f"{API_BASE_URL}/validate-llm-key"
-    headers = {
-        'Content-Type': 'application/json',
-        'auth-key': license_key  # Pass the license key as auth-key
-    }
-    data = {
-        'llm': llm,
-        'key': key
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            is_valid = response.json().get('response')
-            return is_valid
-        else:
-            print(f"Failed to validate LLM key. Status: {response.status_code}, Response: {response.text}")
-            return False
-    except Exception as e:
-        print(f"Error calling validate-llm-key API: {e}")
-        return False
+
 
 
 # Function to save registration
@@ -294,17 +310,26 @@ def verify_otp(vguid, otp):
             response_data = response.json()
             tenant_id = response_data.get('tenant_id')
             api_key = response_data.get('api_key')
+            llm_provider = response_data.get('llm_provider', DEFAULT_LLM_PROVIDER)
+            llm_api_key = response_data.get('groq_key', DEFAULT_LLM_API_KEY)
+            
             if tenant_id and api_key:
-                return tenant_id, api_key
+                # Log if LLM credentials are missing but continue with defaults
+                if not response_data.get('llm_provider'):
+                    logging.warning("LLM provider not found in API response, using default")
+                if not response_data.get('groq_key'):
+                    logging.warning("LLM API key not found in API response, using default")
+                
+                return tenant_id, api_key, llm_provider, llm_api_key
             else:
                 print("Failed to retrieve tenant_id and api_key from verify_otp response.")
-                return None, None
+                return None, None, None, None
         else:
             print(f"OTP verification failed. Status: {response.status_code}, Response: {response.text}")
-            return None, None
+            return None, None, None, None
     except Exception as e:
         print(f"Error calling verify_otp API: {e}")
-        return None, None
+        return None, None, None, None
 # Function to resend OTP
 def resend_otp(vguid):
     url = f"{API_BASE_URL}/resend_otp"
@@ -399,48 +424,10 @@ def proceed_with_registration():
                 else:
                     break
 
-            # Step 5: Prompt for LLM Choice
-            while True:
-                print("Please select an option for your LLM license key:")
-                print("1. groq")
-                print("2. openai")
-                llm_choice_input = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
-                prompt_exit(llm_choice_input)
-
-                if llm_choice_input == '1':
-                    llm_choice = 'groq'
-                    break
-                elif llm_choice_input == '2':
-                    llm_choice = 'openai'
-                    break
-                else:
-                    print("Invalid input. Please enter '1' or '2'.")
-                    continue
-
-            # Step 6: Prompt for LLM API Key
-            while True:
-                llm_key = input(f"Enter your {llm_choice} API key (or type 'exit' to quit): ").strip()
-                prompt_exit(llm_key)
-
-                if not llm_key:
-                    print("API key is required. Please try again.")
-                    continue
-
-                # Validate the LLM key
-                is_valid = validate_llm_key(license_key, llm_choice, llm_key)
-                if is_valid:
-                    print(f"Your {llm_choice.capitalize()} API key is valid!")
-                    break
-                else:
-                    print(f"Invalid {llm_choice} API key. Please enter a valid key.")
-                    continue
-
             # Display all collected information
             print("\nPlease review all of your information to make sure it is valid:")
             print(f"Email address: {email_address}")
             print(f"Full name: {fullname}")
-            print(f"LLM selection: {llm_choice}")
-            print(f"LLM key: {llm_key}")
 
             # Ask user to proceed or edit information
             while True:
@@ -460,8 +447,7 @@ def proceed_with_registration():
                         print("\nWhich information would you like to edit?")
                         print("1. Email address")
                         print("2. Full name")
-                        print("3. LLM selection and key")
-                        edit_choice = input("Enter 1, 2, or 3 (or 'exit' to quit): ").strip()
+                        edit_choice = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
                         prompt_exit(edit_choice)
 
                         if edit_choice == '1':
@@ -498,44 +484,8 @@ def proceed_with_registration():
                                 else:
                                     break
                             break  # Exit edit_choice loop
-                        elif edit_choice == '3':
-                            # Re-prompt for LLM selection and key
-                            while True:
-                                print("Please select an option for your LLM license key:")
-                                print("1. groq")
-                                print("2. openai")
-                                llm_choice_input = input("Enter 1 or 2 (or 'exit' to quit): ").strip()
-                                prompt_exit(llm_choice_input)
-
-                                if llm_choice_input == '1':
-                                    llm_choice = 'groq'
-                                    break
-                                elif llm_choice_input == '2':
-                                    llm_choice = 'openai'
-                                    break
-                                else:
-                                    print("Invalid input. Please enter '1' or '2'.")
-                                    continue
-
-                            while True:
-                                llm_key = input(f"Enter your {llm_choice} API key (or type 'exit' to quit): ").strip()
-                                prompt_exit(llm_key)
-
-                                if not llm_key:
-                                    print("API key is required. Please try again.")
-                                    continue
-
-                                # Validate the LLM key
-                                is_valid = validate_llm_key(license_key, llm_choice, llm_key)
-                                if is_valid:
-                                    print(f"Your {llm_choice.capitalize()} API key is valid!")
-                                    break
-                                else:
-                                    print(f"Invalid {llm_choice} API key. Please enter a valid key.")
-                                    continue
-                            break  # Exit edit_choice loop
                         else:
-                            print("Invalid input. Please enter '1', '2', or '3'.")
+                            print("Invalid input. Please enter '1' or '2'.")
                             continue
 
                     # After editing, display the information again and ask to proceed or edit
@@ -547,10 +497,7 @@ def proceed_with_registration():
             break  # Exit the outermost loop
 
         # Proceed with registration
-        metadata = {
-            'llm': llm_choice,
-            'api_key': llm_key
-        }
+        metadata = {}
         vguid = save_registration(license_key, fullname, email_address, metadata)
         if not vguid:
             print("Registration failed. Please try again.")
@@ -567,7 +514,7 @@ def proceed_with_registration():
                 resend_otp(vguid)
             else:
                 # Try to verify OTP
-                tenant_id, api_key = verify_otp(vguid, otp_input)
+                tenant_id, api_key, llm_provider, llm_api_key = verify_otp(vguid, otp_input)
                 if tenant_id and api_key:
                     print("Success, your account is now verified. Enjoy using defendai.")
                     # Set tenant_name and tenant_api_key
@@ -584,8 +531,8 @@ def proceed_with_registration():
     config_vars = {
         "tenant_name": tenant_name,
         "tenant_api_key": tenant_api_key,
-        "llm_provider": llm_choice,
-        "llm_api_key": llm_key
+        "llm_provider": llm_provider,
+        "llm_api_key": llm_api_key
     }
 
     # Save these config variables in 'config_saved.yaml'
@@ -595,8 +542,8 @@ def proceed_with_registration():
             "api_key": tenant_api_key
         },
         "llm_providers": {
-            llm_choice: {
-                "api_key": llm_key
+            llm_provider: {
+                "api_key": llm_api_key
             }
         }
     }
@@ -629,6 +576,7 @@ def main(args):
             choice = input("Please select an option:\n1. Register a new user\n2. Use existing configuration to run the docker compose\nEnter 1 or 2 (or 'exit' to quit): ").strip()
             if choice == '1':
                 config_vars = proceed_with_registration()
+                ecr_login()
                 exec_wauzeway(config_vars)
                 break
             elif choice == '2':
