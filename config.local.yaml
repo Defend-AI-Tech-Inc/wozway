@@ -1,0 +1,6 @@
+llm_providers:
+  groq:
+    api_key: YOUR_GROQ_API_KEY_HERE
+tenant:
+  api_key: local-api-key
+  name: local

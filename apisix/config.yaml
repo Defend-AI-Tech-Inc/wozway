@@ -70,5 +70,6 @@ routes:
 
 # register any plugins that we need; all others disabled
 plugins:
+  - local_policy
   - wauzeway_proxy
   - proxy-rewrite

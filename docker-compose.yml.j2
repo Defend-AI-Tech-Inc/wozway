@@ -34,6 +34,7 @@ services:
     volumes:
       - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
       - ./apisix/wauzeway_proxy.lua:/opt/apisix/plugins/wauzeway_proxy.lua:ro
+      - ./apisix/local_policy.lua:/opt/apisix/plugins/local_policy.lua:ro
     ports:
       - "9180:9180/tcp"
       - "9080:9080/tcp"
@@ -72,7 +73,7 @@ services:
     depends_on:
       - wauzeway
     volumes:
-      - ./adminsvc/config_script.sh:/root/adminsvc/config_script.sh
+      - ./adminsvc/config_script_local.sh:/root/adminsvc/config_script.sh
     environment:
       - DEFENDAI_API_KEY={{ tenant_api_key }}
       - DEFENDAI_TENANT_ID={{ tenant_name }}
