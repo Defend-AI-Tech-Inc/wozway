@@ -24,11 +24,31 @@ def check_docker_running():
     try:
         subprocess.run(["docker", "info"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         logging.info("Docker Engine is running.")
+        return True
     except subprocess.CalledProcessError:
-        logging.error("Docker Engine is not running. Please start Docker and try again.")
-        sys.exit(1)
+        print("\n" + "="*60)
+        print("❌ Docker Engine is not running")
+        print("="*60)
+        print("\nPlease start Docker Desktop and try again.")
+        print("\nOptions:")
+        print("1. Start Docker Desktop manually")
+        print("2. Exit")
+        
+        choice = input("\nPress Enter after starting Docker, or type 'exit' to quit: ").strip().lower()
+        if choice == 'exit':
+            print("\nExiting. Goodbye!")
+            sys.exit(0)
+        
+        # Try again after user confirms
+        return check_docker_running()
     except FileNotFoundError:
-        logging.error("Docker is not installed on this system. Please install Docker and try again.")
+        print("\n" + "="*60)
+        print("❌ Docker is not installed")
+        print("="*60)
+        print("\nDocker is required to run wozway.")
+        print("\nPlease install Docker Desktop from:")
+        print("  https://www.docker.com/products/docker-desktop")
+        print("\nAfter installation, run this script again.")
         sys.exit(1)
 
 def prompt_for_llm_config():
@@ -42,7 +62,8 @@ def prompt_for_llm_config():
         print("\nWhich LLM provider would you like to use?")
         print("1. Groq")
         print("2. OpenAI (coming soon)")
-        choice = input("Enter 1 or 2: ").strip()
+        print("3. Exit")
+        choice = input("Enter 1, 2, or 3: ").strip().lower()
         
         if choice == "1":
             llm_provider = "groq"
@@ -51,12 +72,20 @@ def prompt_for_llm_config():
         elif choice == "2":
             print("\nOpenAI support coming soon! Please select Groq for now.")
             continue
+        elif choice == "3" or choice == "exit":
+            print("\nExiting setup. Goodbye!")
+            sys.exit(0)
         else:
-            print("Invalid choice. Please enter 1 or 2.")
+            print("Invalid choice. Please enter 1, 2, or 3.")
     
     # Get API key
     while True:
-        api_key = input(f"\nEnter your {llm_provider.upper()} API key: ").strip()
+        api_key = input(f"\nEnter your {llm_provider.upper()} API key (or 'exit' to quit): ").strip()
+        
+        if api_key.lower() == 'exit':
+            print("\nExiting setup. Goodbye!")
+            sys.exit(0)
+        
         if not api_key:
             print("API key cannot be empty. Please try again.")
             continue
@@ -64,7 +93,10 @@ def prompt_for_llm_config():
         # Validate format
         if llm_provider == "groq" and not api_key.startswith("gsk_"):
             print("Warning: Groq API keys typically start with 'gsk_'")
-            confirm = input("Continue anyway? (y/n): ").strip().lower()
+            confirm = input("Continue anyway? (y/n/exit): ").strip().lower()
+            if confirm == 'exit':
+                print("\nExiting setup. Goodbye!")
+                sys.exit(0)
             if confirm != 'y':
                 continue
         
@@ -258,6 +290,7 @@ def main():
     print("Starting wozway in LOCAL-ONLY mode")
     print("No DefendAI API registration required")
     print("=" * 60)
+    print("\n💡 Tip: Press Ctrl+C at any time to exit")
     print()
 
     # Check Docker is running
