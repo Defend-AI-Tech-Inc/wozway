@@ -1,4 +1,4 @@
-# Enhanced docker-compose with AI detection and dashboard
+# Lightweight version: Dashboard + Basic Detection (No AI/Ollama)
 version: '3.8'
 
 services:
@@ -24,19 +24,17 @@ services:
       - host.docker.internal:host-gateway
     restart: unless-stopped
 
-  # APISIX Gateway with policy enforcement
+  # APISIX Gateway with LOCAL policy enforcement only
   wauzeway:
     image: public.ecr.aws/u1j5h7e7/aigateway:wauzeway.0.01-2
     container_name: wauzeway
     hostname: wauzeway
     depends_on:
       - etcd
-      - ai-detector
     restart: always
     volumes:
       - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
       - ./apisix/local_policy.lua:/opt/apisix/plugins/local_policy.lua:ro
-      - ./apisix/semantic_policy.lua:/opt/apisix/plugins/semantic_policy.lua:ro
       - ./apisix/wauzeway_proxy.lua:/opt/apisix/plugins/wauzeway_proxy.lua:ro
     ports:
       - "9180:9180/tcp"
@@ -90,41 +88,7 @@ services:
       - -c
       - "cd /root/adminsvc && chmod +x ./config_script.sh && ./config_script.sh"
 
-  # NEW: AI Detection Service
-  ai-detector:
-    build:
-      context: ./ai-detector
-      dockerfile: Dockerfile
-    container_name: ai-detector
-    hostname: ai-detector
-    depends_on:
-      - ollama
-    ports:
-      - "8000:8000"
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-    restart: unless-stopped
-
-  # NEW: Ollama for local LLM inference
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    hostname: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    restart: unless-stopped
-    # Pull model on startup
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        ollama serve &
-        sleep 5
-        ollama pull llama3.2:1b
-        wait
-
-  # NEW: Dashboard for policy management
+  # Dashboard for policy management (NO AI DEPENDENCY)
   dashboard:
     build:
       context: ./dashboard
@@ -139,6 +103,3 @@ services:
       - APISIX_ADMIN_URL=http://wauzeway:9180
       - APISIX_API_KEY=edd1c9f034335f136f87ad84b625c81f
     restart: unless-stopped
-
-volumes:
-  ollama-data:

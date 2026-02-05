@@ -177,6 +177,28 @@ function _M.access(conf, ctx)
                 table.insert(violation_types, v.name)
             end
             
+            -- Log to dashboard
+            local log_body = cjson.encode({
+                timestamp = ngx.now(),
+                method = ngx.req.get_method(),
+                uri = ngx.var.uri,
+                status = "blocked",
+                reason = table.concat(violation_types, ", "),
+                policy_type = "local_policy",
+                client_ip = ngx.var.remote_addr
+            })
+            
+            -- Send async log to dashboard (fire and forget)
+            ngx.timer.at(0, function()
+                local httpc = http.new()
+                httpc:set_timeout(1000)
+                httpc:request_uri("http://dashboard:8080/api/activity/log", {
+                    method = "POST",
+                    body = log_body,
+                    headers = {["Content-Type"] = "application/json"}
+                })
+            end)
+            
             local message = {
                 error = "Request blocked by wozway local policy",
                 reason = "Sensitive data detected",
