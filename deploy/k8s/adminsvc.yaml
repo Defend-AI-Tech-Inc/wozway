@@ -18,13 +18,19 @@ spec:
           image: public.ecr.aws/u1j5h7e7/aigateway:adminsvc.0.01-1
           env:
             - name: APISIX_API_KEY
-              value: "edd1c9f034335f136f87ad84b625c81f"
+              valueFrom:
+                secretKeyRef:
+                  name: wozway-secrets
+                  key: apisix-admin-key
             - name: APISIX_TENANT_ID
               value: "1234567890"
             - name: APISIX_GATEWAY
               value: "wauzeway"
             - name: GROQ_API_KEY
-              value: "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"
+              valueFrom:
+                secretKeyRef:
+                  name: wozway-secrets
+                  key: groq-api-key
             - name: APISIX_UPSTREAM_URI
               value: "/wauzeway"
 

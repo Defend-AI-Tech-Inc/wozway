@@ -21,9 +21,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Defaults
 API_BASE_URL = 'https://playground.defendai.tech'
 DEFAULT_TENANT_NAME="synergy"
-DEFAULT_TENANT_API_KEY="f64a2d8a-d746-4d01-8059-82981016b6e6"
+DEFAULT_TENANT_API_KEY=""   # provide via DEFENDAI_API_KEY env var or interactive prompt
 DEFAULT_LLM_PROVIDER="groq"
-DEFAULT_LLM_API_KEY="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"
+DEFAULT_LLM_API_KEY=""      # provide via LLM_API_KEY env var or interactive prompt
 PLACEHOLDER_VALUES = {"your_tenant_name", "defendai_api_key", "groq_api_key"}
 
 def check_docker_running():

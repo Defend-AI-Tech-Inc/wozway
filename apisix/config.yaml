@@ -11,10 +11,10 @@ deployment:
   admin:
     admin_key:
       - name: admin
-        key: edd1c9f034335f136f87ad84b625c81f
+        key: 49538a6fc9dfc1ddea6d87a71e99cc1b
         role: admin
       - name: "viewer"
-        key: 4054f7cf07e344346cd3f287985e76a2
+        key: a5efda8a450c95cc608390aa579cd970
         role: viewer
     allow_admin:
       - 0.0.0.0/0
@@ -70,5 +70,7 @@ routes:
 
 # register any plugins that we need; all others disabled
 plugins:
+  - local_policy
+  - semantic_policy
   - wauzeway_proxy
   - proxy-rewrite

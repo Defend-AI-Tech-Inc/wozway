@@ -1,8 +1,8 @@
-# docker-compose to connect to defendai
-
+# Enhanced docker-compose with AI detection and dashboard
 version: '3.8'
 
 services:
+  # OpenWebUI - Chat interface
   owebui:
     image: ghcr.io/open-webui/open-webui:latest
     container_name: owebui
@@ -24,6 +24,7 @@ services:
       - host.docker.internal:host-gateway
     restart: unless-stopped
 
+  # APISIX Gateway with policy enforcement
   wauzeway:
     image: public.ecr.aws/u1j5h7e7/aigateway:wauzeway.0.01-2
     container_name: wauzeway
@@ -33,6 +34,8 @@ services:
     restart: always
     volumes:
       - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./apisix/local_policy.lua:/opt/apisix/plugins/local_policy.lua:ro
+      - ./apisix/semantic_policy.lua:/opt/apisix/plugins/semantic_policy.lua:ro
       - ./apisix/wauzeway_proxy.lua:/opt/apisix/plugins/wauzeway_proxy.lua:ro
     ports:
       - "9180:9180/tcp"
@@ -44,7 +47,11 @@ services:
       - APISIX_LISTEN_ADDRESS=unix:/tmp/runner.sock
       - APISIX_UPSTREAM_URI=/wauzeway
       - DEFENDAI_TENANT_ID={{ tenant_name }}
+      - DEFENDAI_API_KEY={{ tenant_api_key }}
+      - LLM_PROVIDER={{ llm_provider }}
+      - LLM_API_KEY={{ llm_api_key }}
 
+  # etcd - Configuration storage
   etcd:
     image: bitnami/etcd:3.5.11
     container_name: etcd
@@ -52,11 +59,6 @@ services:
     restart: always
     volumes:
       - ./etcd/data:/bitnami/etcd
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://172.17.0.1:5514"
-        tag: etcd
     environment:
       ETCD_ENABLE_V2: "true"
       ALLOW_NONE_AUTHENTICATION: "yes"
@@ -65,6 +67,7 @@ services:
     ports:
       - "2379:2379/tcp"
 
+  # Admin service - Configure routes
   adminsvc:
     image: public.ecr.aws/u1j5h7e7/aigateway:adminsvc.0.01-2
     container_name: adminsvc
@@ -72,17 +75,69 @@ services:
     depends_on:
       - wauzeway
     volumes:
-      - ./adminsvc/config_script.sh:/root/adminsvc/config_script.sh
+      - ./adminsvc/config_script_local.sh:/root/adminsvc/config_script.sh
     environment:
       - DEFENDAI_API_KEY={{ tenant_api_key }}
       - DEFENDAI_TENANT_ID={{ tenant_name }}
-      - GROQ_API_KEY={{ llm_api_key }}
       - LLM_PROVIDER={{ llm_provider }}
       - LLM_API_KEY={{ llm_api_key }}
-      - APISIX_API_KEY=edd1c9f034335f136f87ad84b625c81f
+      - APISIX_API_KEY={{ apisix_admin_key }}
       - APISIX_GATEWAY=wauzeway
       - APISIX_UPSTREAM_URI=/wauzeway
     entrypoint:
       - /bin/bash
       - -c
       - "cd /root/adminsvc && chmod +x ./config_script.sh && ./config_script.sh"
+
+  # NEW: AI Detection Service
+  ai-detector:
+    build:
+      context: ./ai-detector
+      dockerfile: Dockerfile
+    container_name: ai-detector
+    hostname: ai-detector
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    restart: unless-stopped
+
+  # NEW: Ollama for local LLM inference
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    hostname: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    # Pull model on startup
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        sleep 5
+        ollama pull llama3.2:1b
+        wait
+
+  # NEW: Dashboard for policy management
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: wozway-dashboard
+    hostname: dashboard
+    depends_on:
+      - wauzeway
+    ports:
+      - "8080:8080"
+    environment:
+      - APISIX_ADMIN_URL=http://wauzeway:9180
+      - APISIX_API_KEY={{ apisix_admin_key }}
+    restart: unless-stopped
+
+volumes:
+  ollama-data:

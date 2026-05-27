@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wozway — Security Gateway</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <style>
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.15); }
+        }
+        .live-dot { animation: pulse-ring 2s ease-in-out infinite; }
+
+        @keyframes fade-slide {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fade-slide 0.25s ease-out; }
+
+        .card { background: #0d1321; border: 1px solid rgba(255,255,255,0.06); }
+        .stat-num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+        /* custom radio card highlight */
+        input[type=radio]:checked ~ .radio-card { border-color: #6366f1; background: rgba(99,102,241,0.08); }
+        input[type=checkbox]:checked ~ span { color: #818cf8; }
+    </style>
+</head>
+<body class="bg-[#080c14] text-slate-300 font-sans antialiased"
+      x-data="dashboard()" x-init="init()">
+
+<div class="flex h-screen overflow-hidden">
+
+    <!-- ════════════════════════════════════════════════════════
+         SIDEBAR
+    ═══════════════════════════════════════════════════════════ -->
+    <aside class="w-56 flex-shrink-0 flex flex-col"
+           style="background:#0b1019;border-right:1px solid rgba(255,255,255,0.05)">
+
+        <!-- Logo -->
+        <div class="px-5 pt-5 pb-4" style="border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-900/50">
+                    <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-sm font-bold text-white">Wozway</p>
+                    <p class="text-xs text-slate-600">Security Gateway</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nav -->
+        <nav class="flex-1 px-3 py-4 space-y-0.5">
+            <template x-for="item in navItems" :key="item.id">
+                <button @click="currentView = item.id"
+                    class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 text-left"
+                    :class="currentView === item.id
+                        ? 'bg-indigo-600/15 text-indigo-400 border border-indigo-500/25'
+                        : 'text-slate-500 hover:text-slate-300 hover:bg-white/4 border border-transparent'">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" :d="item.icon"/>
+                    </svg>
+                    <span x-text="item.label"></span>
+                    <span x-show="item.id === 'activity' && blockedCount > 0"
+                          class="ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400"
+                          x-text="blockedCount"></span>
+                    <span x-show="item.id === 'policies'"
+                          class="ml-auto text-xs font-medium px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-500"
+                          x-text="policies.length"></span>
+                </button>
+            </template>
+        </nav>
+
+        <!-- Gateway status -->
+        <div class="px-4 py-4" style="border-top:1px solid rgba(255,255,255,0.05)">
+            <div class="flex items-center gap-2 mb-1">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 live-dot flex-shrink-0"></div>
+                <span class="text-xs text-slate-400 font-medium">Gateway online</span>
+            </div>
+            <p class="text-xs text-slate-700 pl-4" x-text="lastUpdated ? 'Updated ' + lastUpdated : ''"></p>
+        </div>
+    </aside>
+
+    <!-- ════════════════════════════════════════════════════════
+         MAIN AREA
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+        <!-- Top bar -->
+        <header class="flex-shrink-0 flex items-center justify-between px-6 py-3"
+                style="background:rgba(11,16,25,0.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div>
+                <h1 class="text-sm font-semibold text-white" x-text="navItems.find(n=>n.id===currentView)?.label"></h1>
+                <p class="text-xs text-slate-600">LLM traffic inspection · local policy mode</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button @click="refreshAll()"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900/50 transition-all">
+                    <svg class="w-3.5 h-3.5" :class="loading && 'animate-spin'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Refresh
+                </button>
+                <button @click="showCreateModal = true; currentView = 'policies'"
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-900/30">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    New Policy
+                </button>
+            </div>
+        </header>
+
+        <!-- Scrollable body -->
+        <div class="flex-1 overflow-y-auto px-6 py-6">
+
+            <!-- ──────────────────────────────────────────────────
+                 OVERVIEW
+            ─────────────────────────────────────────────────── -->
+            <div x-show="currentView === 'overview'" class="space-y-5 fade-in">
+
+                <!-- 4 stat cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+                    <div class="card rounded-xl p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <p class="text-xs font-medium text-slate-600 uppercase tracking-wider">Total Requests</p>
+                            <div class="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold text-white stat-num" x-text="stats.totalRequests"></p>
+                        <p class="text-xs text-slate-600 mt-1">intercepted by gateway</p>
+                    </div>
+
+                    <div class="card rounded-xl p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <p class="text-xs font-medium text-slate-600 uppercase tracking-wider">Blocked</p>
+                            <div class="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold text-red-400 stat-num" x-text="stats.blockedRequests"></p>
+                        <p class="text-xs text-slate-600 mt-1">violations caught</p>
+                    </div>
+
+                    <div class="card rounded-xl p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <p class="text-xs font-medium text-slate-600 uppercase tracking-wider">Block Rate</p>
+                            <div class="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold text-amber-400 stat-num" x-text="blockRatePct + '%'"></p>
+                        <div class="mt-2.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-400 rounded-full transition-all duration-700"
+                                 :style="'width:' + blockRatePct + '%'"></div>
+                        </div>
+                    </div>
+
+                    <div class="card rounded-xl p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <p class="text-xs font-medium text-slate-600 uppercase tracking-wider">Active Policies</p>
+                            <div class="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <p class="text-3xl font-bold text-emerald-400 stat-num" x-text="stats.activePolicies"></p>
+                        <p class="text-xs text-slate-600 mt-1">rules enforcing</p>
+                    </div>
+                </div>
+
+                <!-- Charts row -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                    <!-- Donut -->
+                    <div class="card rounded-xl p-5">
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-5">Request Disposition</p>
+                        <div class="flex items-center justify-center gap-10">
+                            <div class="relative w-32 h-32">
+                                <canvas id="dispositionChart" width="128" height="128"></canvas>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span class="text-2xl font-bold text-white stat-num" x-text="blockRatePct + '%'"></span>
+                                    <span class="text-xs text-slate-600">blocked</span>
+                                </div>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
+                                        <span class="text-xs text-slate-500">Allowed</span>
+                                    </div>
+                                    <p class="text-xl font-bold text-emerald-400 stat-num pl-4"
+                                       x-text="Math.max(stats.totalRequests - stats.blockedRequests, 0)"></p>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <div class="w-2.5 h-2.5 rounded-full bg-red-400"></div>
+                                        <span class="text-xs text-slate-500">Blocked</span>
+                                    </div>
+                                    <p class="text-xl font-bold text-red-400 stat-num pl-4" x-text="stats.blockedRequests"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Threat breakdown -->
+                    <div class="card rounded-xl p-5">
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-5">Threat Breakdown</p>
+                        <div x-show="threatTypes.length > 0" class="space-y-4">
+                            <template x-for="(threat, i) in threatTypes" :key="threat.name">
+                                <div>
+                                    <div class="flex justify-between items-center mb-1.5">
+                                        <span class="text-xs text-slate-400 truncate max-w-[180px]" x-text="threat.name"></span>
+                                        <span class="text-xs font-semibold text-slate-300 ml-2 flex-shrink-0" x-text="threat.count"></span>
+                                    </div>
+                                    <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                        <div class="h-full rounded-full transition-all duration-700"
+                                             :class="['bg-red-400','bg-amber-400','bg-violet-400','bg-blue-400','bg-orange-400'][i % 5]"
+                                             :style="'width:' + threat.pct + '%'"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <div x-show="threatTypes.length === 0"
+                             class="flex flex-col items-center justify-center h-28 gap-2">
+                            <svg class="w-8 h-8 text-slate-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <p class="text-xs text-slate-700">No violations detected yet</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live feed -->
+                <div class="card rounded-xl overflow-hidden">
+                    <div class="flex items-center justify-between px-5 py-3.5"
+                         style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot"></div>
+                            <span class="text-xs font-semibold text-slate-300">Live Feed</span>
+                        </div>
+                        <button @click="currentView = 'activity'"
+                                class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+                            View all →
+                        </button>
+                    </div>
+                    <div>
+                        <template x-for="(a, i) in activityLog.slice(0, 6)" :key="a.timestamp + '' + i">
+                            <div class="flex items-center gap-4 px-5 py-3 hover:bg-white/2 transition-colors"
+                                 style="border-bottom:1px solid rgba(255,255,255,0.03)">
+                                <div class="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                                     :class="a.status === 'blocked' ? 'bg-red-500/15' : 'bg-emerald-500/15'">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                         :class="a.status === 'blocked' ? 'text-red-400' : 'text-emerald-400'">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                              :d="a.status === 'blocked' ? 'M6 18L18 6M6 6l12 12' : 'M5 13l4 4L19 7'"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-xs font-medium text-slate-300 truncate"
+                                       x-text="a.reason || 'Passed all policy checks'"></p>
+                                    <p class="text-xs text-slate-600 truncate" x-text="a.uri + ' · ' + (a.client_ip || '—')"></p>
+                                </div>
+                                <div class="flex items-center gap-2 flex-shrink-0">
+                                    <span x-show="a.policy_type"
+                                          class="text-xs px-1.5 py-0.5 rounded font-medium"
+                                          :class="a.policy_type === 'semantic_policy' ? 'bg-violet-500/15 text-violet-400' : 'bg-blue-500/15 text-blue-400'"
+                                          x-text="a.policy_type === 'semantic_policy' ? 'AI' : 'Regex'"></span>
+                                    <span class="text-xs text-slate-700 w-16 text-right" x-text="fmt(a.timestamp)"></span>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="activityLog.length === 0"
+                             class="px-5 py-10 text-center text-slate-700 text-xs">
+                            Waiting for traffic…
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ──────────────────────────────────────────────────
+                 ACTIVITY
+            ─────────────────────────────────────────────────── -->
+            <div x-show="currentView === 'activity'" class="space-y-4 fade-in">
+
+                <div class="flex items-center gap-3">
+                    <select x-model="activityFilter"
+                            class="bg-slate-900 border border-slate-800 text-slate-400 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        <option value="all">All requests</option>
+                        <option value="blocked">Blocked only</option>
+                        <option value="allowed">Allowed only</option>
+                    </select>
+                    <div class="flex items-center gap-2 text-xs text-slate-600 ml-2">
+                        <span x-text="filteredActivity.length + ' events'"></span>
+                    </div>
+                    <div class="ml-auto">
+                        <button @click="addTestActivity()"
+                                class="text-xs px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-300 rounded-lg transition-colors">
+                            + Add test data
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card rounded-xl overflow-hidden">
+                    <table class="min-w-full">
+                        <thead>
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Status</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Time</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Route</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Violation</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Detector</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Client</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(a, i) in filteredActivity" :key="a.timestamp + '' + i">
+                                <tr class="hover:bg-white/2 transition-colors"
+                                    style="border-bottom:1px solid rgba(255,255,255,0.03)">
+                                    <td class="px-5 py-3">
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
+                                              :class="a.status === 'blocked'
+                                                  ? 'bg-red-500/12 text-red-400 ring-1 ring-red-500/20'
+                                                  : 'bg-emerald-500/12 text-emerald-400 ring-1 ring-emerald-500/20'">
+                                            <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                                  :class="a.status === 'blocked' ? 'bg-red-400' : 'bg-emerald-400'"></span>
+                                            <span x-text="a.status.toUpperCase()"></span>
+                                        </span>
+                                    </td>
+                                    <td class="px-5 py-3 text-xs text-slate-500 whitespace-nowrap font-mono" x-text="fmt(a.timestamp)"></td>
+                                    <td class="px-5 py-3 text-xs font-mono text-slate-400" x-text="a.uri"></td>
+                                    <td class="px-5 py-3 text-xs text-slate-300" x-text="a.reason || '—'"></td>
+                                    <td class="px-5 py-3">
+                                        <span x-show="a.policy_type"
+                                              class="text-xs px-2 py-0.5 rounded font-medium"
+                                              :class="a.policy_type === 'semantic_policy' ? 'bg-violet-500/15 text-violet-400' : 'bg-blue-500/15 text-blue-400'"
+                                              x-text="a.policy_type"></span>
+                                        <span x-show="!a.policy_type" class="text-slate-700 text-xs">—</span>
+                                    </td>
+                                    <td class="px-5 py-3 text-xs font-mono text-slate-600" x-text="a.client_ip || '—'"></td>
+                                </tr>
+                            </template>
+                            <tr x-show="filteredActivity.length === 0">
+                                <td colspan="6" class="px-5 py-12 text-center text-slate-700 text-xs">
+                                    No events match your filter
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ──────────────────────────────────────────────────
+                 POLICIES
+            ─────────────────────────────────────────────────── -->
+            <div x-show="currentView === 'policies'" class="space-y-4 fade-in">
+
+                <div class="card rounded-xl overflow-hidden">
+                    <div class="flex items-center justify-between px-5 py-4"
+                         style="border-bottom:1px solid rgba(255,255,255,0.05)">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-200">Enforcement Rules</p>
+                            <p class="text-xs text-slate-600 mt-0.5" x-text="policies.length + ' policies configured'"></p>
+                        </div>
+                        <button @click="showCreateModal = true"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            New Policy
+                        </button>
+                    </div>
+                    <table class="min-w-full">
+                        <thead>
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Policy</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Route</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Engine</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Status</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="p in policies" :key="p.id">
+                                <tr class="hover:bg-white/2 transition-colors"
+                                    style="border-bottom:1px solid rgba(255,255,255,0.03)">
+                                    <td class="px-5 py-4">
+                                        <p class="text-sm font-medium text-slate-200" x-text="p.name"></p>
+                                        <p class="text-xs text-slate-700 font-mono mt-0.5" x-text="p.id"></p>
+                                    </td>
+                                    <td class="px-5 py-4 text-xs font-mono text-slate-500" x-text="p.uri"></td>
+                                    <td class="px-5 py-4">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="pl in p.plugins" :key="pl.type">
+                                                <span class="text-xs px-2 py-0.5 rounded font-medium"
+                                                      :class="pl.type === 'semantic_policy'
+                                                          ? 'bg-violet-500/15 text-violet-400'
+                                                          : 'bg-blue-500/15 text-blue-400'"
+                                                      x-text="pl.type === 'semantic_policy' ? 'AI Semantic' : 'Regex'"></span>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="px-5 py-4">
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                                              :class="p.enabled
+                                                  ? 'bg-emerald-500/12 text-emerald-400 ring-1 ring-emerald-500/20'
+                                                  : 'bg-slate-800 text-slate-500'">
+                                            <span class="w-1.5 h-1.5 rounded-full"
+                                                  :class="p.enabled ? 'bg-emerald-400' : 'bg-slate-600'"></span>
+                                            <span x-text="p.enabled ? 'Active' : 'Inactive'"></span>
+                                        </span>
+                                    </td>
+                                    <td class="px-5 py-4">
+                                        <div class="flex items-center gap-4">
+                                            <button @click="togglePolicy(p)"
+                                                    class="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                                                    x-text="p.enabled ? 'Disable' : 'Enable'"></button>
+                                            <button @click="deletePolicy(p)"
+                                                    class="text-xs text-red-600 hover:text-red-400 transition-colors">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <tr x-show="policies.length === 0">
+                                <td colspan="5" class="px-5 py-12 text-center text-slate-700 text-xs">
+                                    No policies configured yet
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div><!-- /scrollable -->
+    </div><!-- /main -->
+</div><!-- /flex root -->
+
+<!-- ════════════════════════════════════════════════════════
+     CREATE POLICY MODAL
+═══════════════════════════════════════════════════════════ -->
+<div x-show="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="display:none;">
+    <div class="fixed inset-0 bg-black/70 backdrop-blur-sm" @click="showCreateModal = false"></div>
+    <div class="relative w-full max-w-md rounded-2xl shadow-2xl"
+         style="background:#0d1321;border:1px solid rgba(255,255,255,0.08)">
+
+        <div class="flex items-center justify-between px-6 py-5"
+             style="border-bottom:1px solid rgba(255,255,255,0.06)">
+            <h3 class="text-base font-semibold text-white">New Enforcement Policy</h3>
+            <button @click="showCreateModal = false" class="text-slate-600 hover:text-slate-400 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="px-6 py-5 space-y-5">
+            <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">Policy Name</label>
+                <input x-model="newPolicy.name" type="text" placeholder="e.g. Block PII in customer support"
+                       class="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-slate-700 transition-all">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1.5">Route Pattern</label>
+                <input x-model="newPolicy.uri" type="text"
+                       class="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm font-mono rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-500 mb-2">Detection Engine</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="relative cursor-pointer">
+                        <input type="radio" x-model="newPolicy.plugin_type" value="local_policy" class="sr-only">
+                        <div class="flex flex-col gap-2 p-3.5 rounded-xl border transition-all duration-150"
+                             :class="newPolicy.plugin_type === 'local_policy'
+                                 ? 'border-indigo-500/60 bg-indigo-500/8'
+                                 : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'">
+                            <div class="w-7 h-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-200">Regex</p>
+                                <p class="text-xs text-slate-600">~1ms · no AI needed</p>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="relative cursor-pointer">
+                        <input type="radio" x-model="newPolicy.plugin_type" value="semantic_policy" class="sr-only">
+                        <div class="flex flex-col gap-2 p-3.5 rounded-xl border transition-all duration-150"
+                             :class="newPolicy.plugin_type === 'semantic_policy'
+                                 ? 'border-violet-500/60 bg-violet-500/8'
+                                 : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'">
+                            <div class="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-200">AI Semantic</p>
+                                <p class="text-xs text-slate-600">~100ms · obfuscation aware</p>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div x-show="newPolicy.plugin_type === 'semantic_policy'" x-transition>
+                <label class="block text-xs font-medium text-slate-500 mb-2">Detection Checks</label>
+                <div class="space-y-2">
+                    <template x-for="check in ['pii', 'prompt_injection', 'toxicity']" :key="check">
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            <div class="w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0"
+                                 :class="newPolicy.detection_types.includes(check)
+                                     ? 'bg-indigo-600 border-indigo-600'
+                                     : 'bg-slate-900 border-slate-700 group-hover:border-slate-600'">
+                                <svg x-show="newPolicy.detection_types.includes(check)"
+                                     class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                                </svg>
+                                <input type="checkbox" :value="check" x-model="newPolicy.detection_types" class="sr-only">
+                            </div>
+                            <span class="text-sm text-slate-300 capitalize" x-text="check.replace('_', ' ')"></span>
+                        </label>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 px-6 py-4"
+             style="border-top:1px solid rgba(255,255,255,0.06)">
+            <button @click="showCreateModal = false"
+                    class="px-4 py-2 text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                Cancel
+            </button>
+            <button @click="createPolicy()"
+                    class="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-lg shadow-indigo-900/30">
+                Create Policy
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     ALPINE COMPONENT
+═══════════════════════════════════════════════════════════ -->
+<script>
+function dashboard() {
+    return {
+        policies: {{ policies | tojson }},
+        activityLog: [],
+        activityFilter: 'all',
+        currentView: 'overview',
+        loading: false,
+        showCreateModal: false,
+        lastUpdated: null,
+        _chart: null,
+
+        stats: {
+            totalRequests: 0,
+            blockedRequests: 0,
+            activePolicies: {{ active_policies }},
+        },
+
+        newPolicy: {
+            name: '',
+            uri: '/openai/v1/chat/completions',
+            plugin_type: 'local_policy',
+            detection_types: ['pii', 'prompt_injection'],
+        },
+
+        navItems: [
+            { id: 'overview',  label: 'Overview',  icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
+            { id: 'activity',  label: 'Activity',  icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+            { id: 'policies',  label: 'Policies',  icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+        ],
+
+        /* ── Computed ── */
+        get blockRatePct() {
+            if (!this.stats.totalRequests) return 0;
+            return Math.round(this.stats.blockedRequests / this.stats.totalRequests * 100);
+        },
+        get blockedCount() {
+            return this.activityLog.filter(a => a.status === 'blocked').length;
+        },
+        get filteredActivity() {
+            if (this.activityFilter === 'blocked') return this.activityLog.filter(a => a.status === 'blocked');
+            if (this.activityFilter === 'allowed') return this.activityLog.filter(a => a.status === 'allowed');
+            return this.activityLog;
+        },
+        get threatTypes() {
+            const counts = {};
+            this.activityLog.filter(a => a.status === 'blocked' && a.reason).forEach(a => {
+                counts[a.reason] = (counts[a.reason] || 0) + 1;
+            });
+            const max = Math.max(...Object.values(counts), 1);
+            return Object.entries(counts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([name, count]) => ({ name, count, pct: Math.round(count / max * 100) }));
+        },
+
+        /* ── Init ── */
+        async init() {
+            await Promise.all([this.refreshActivity(), this.refreshStats()]);
+            this.$nextTick(() => this.initChart());
+            setInterval(() => this.refreshActivity(), 5000);
+            setInterval(() => this.refreshStats(), 15000);
+        },
+
+        /* ── Chart ── */
+        initChart() {
+            const el = document.getElementById('dispositionChart');
+            if (!el) return;
+            const allowed = Math.max(this.stats.totalRequests - this.stats.blockedRequests, 0);
+            this._chart = new Chart(el, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [allowed || 1, this.stats.blockedRequests],
+                        backgroundColor: ['rgba(52,211,153,0.85)', 'rgba(248,113,113,0.85)'],
+                        borderColor: '#0d1321',
+                        borderWidth: 4,
+                        hoverOffset: 6,
+                    }]
+                },
+                options: {
+                    cutout: '74%',
+                    plugins: { legend: { display: false } },
+                    animation: { duration: 600 },
+                }
+            });
+        },
+        updateChart() {
+            if (!this._chart) return;
+            const allowed = Math.max(this.stats.totalRequests - this.stats.blockedRequests, 0);
+            this._chart.data.datasets[0].data = [allowed || 1, this.stats.blockedRequests];
+            this._chart.update('active');
+        },
+
+        /* ── Helpers ── */
+        fmt(ts) {
+            if (!ts) return '—';
+            const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
+            return isNaN(d.getTime()) ? String(ts) : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        },
+
+        /* ── API calls ── */
+        async refreshActivity() {
+            try {
+                const r = await fetch('/api/activity');
+                const d = await r.json();
+                this.activityLog = d.activity;
+                this.lastUpdated = new Date().toLocaleTimeString();
+            } catch (e) { console.error('activity:', e); }
+        },
+        async refreshStats() {
+            try {
+                const r = await fetch('/api/stats');
+                const d = await r.json();
+                this.stats.totalRequests  = d.total_requests;
+                this.stats.blockedRequests = d.blocked_requests;
+                this.stats.activePolicies  = d.policy_routes;
+                this.updateChart();
+            } catch (e) { console.error('stats:', e); }
+        },
+        async refreshPolicies() {
+            try {
+                const r = await fetch('/api/policies');
+                const d = await r.json();
+                this.policies = d.policies;
+            } catch (e) { console.error('policies:', e); }
+        },
+        async refreshAll() {
+            this.loading = true;
+            await Promise.all([this.refreshActivity(), this.refreshStats(), this.refreshPolicies()]);
+            this.loading = false;
+        },
+        async addTestActivity() {
+            await fetch('/api/activity/test', { method: 'POST' });
+            await this.refreshActivity();
+            await this.refreshStats();
+            this.updateChart();
+        },
+        async createPolicy() {
+            const cfg = {};
+            if (this.newPolicy.plugin_type === 'semantic_policy') {
+                cfg.detection_types = this.newPolicy.detection_types;
+                cfg.threshold = 0.7;
+                cfg.use_tiered_detection = true;
+            }
+            const r = await fetch('/api/policies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: this.newPolicy.name,
+                    uri:  this.newPolicy.uri,
+                    plugin_type: this.newPolicy.plugin_type,
+                    config: cfg,
+                }),
+            });
+            if (r.ok) {
+                this.showCreateModal = false;
+                this.newPolicy = { name: '', uri: '/openai/v1/chat/completions', plugin_type: 'local_policy', detection_types: ['pii', 'prompt_injection'] };
+                await this.refreshPolicies();
+            }
+        },
+        async togglePolicy(p) {
+            const r = await fetch(`/api/policies/${p.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: !p.enabled }),
+            });
+            if (r.ok) await this.refreshPolicies();
+        },
+        async deletePolicy(p) {
+            if (!confirm(`Delete "${p.name}"?`)) return;
+            const r = await fetch(`/api/policies/${p.id}`, { method: 'DELETE' });
+            if (r.ok) await this.refreshPolicies();
+        },
+    };
+}
+</script>
+</body>
+</html>

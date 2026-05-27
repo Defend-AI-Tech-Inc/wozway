@@ -17,7 +17,7 @@ services:
       - PORT=3082
       - WEBUI_AUTH=False
       - ENABLE_SIGNUP=False
-      - OPENAI_API_KEYS=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
+      - OPENAI_API_KEYS=REMOVED_GROQ_API_KEY
       - OPENAI_API_BASE_URLS=http://wauzeway:9080/openai/v1
       - DEFAULT_MODELS=llama-3.1-8b-instant
     extra_hosts:
@@ -74,12 +74,12 @@ services:
     volumes:
       - ./adminsvc/config_script.sh:/root/adminsvc/config_script.sh
     environment:
-      - DEFENDAI_API_KEY=f64a2d8a-d746-4d01-8059-82981016b6e6
+      - DEFENDAI_API_KEY=REMOVED_DEFENDAI_API_KEY
       - DEFENDAI_TENANT_ID=synergy
-      - GROQ_API_KEY=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
+      - GROQ_API_KEY=REMOVED_GROQ_API_KEY
       - LLM_PROVIDER=groq
-      - LLM_API_KEY=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
-      - APISIX_API_KEY=edd1c9f034335f136f87ad84b625c81f
+      - LLM_API_KEY=REMOVED_GROQ_API_KEY
+      - APISIX_API_KEY=REMOVED_APISIX_ADMIN_KEY
       - APISIX_GATEWAY=wauzeway
       - APISIX_UPSTREAM_URI=/wauzeway
     entrypoint:

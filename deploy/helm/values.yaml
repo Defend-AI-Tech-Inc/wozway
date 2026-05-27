@@ -8,10 +8,10 @@ adminsvc:
   containerPort: 8080
   servicePort: 80
   env:
-    APISIX_API_KEY: edd1c9f034335f136f87ad84b625c81f
+    APISIX_API_KEY: ""        # set via --set or a Kubernetes Secret; do not hardcode
     APISIX_TENANT_ID: "1234567890"
     APISIX_GATEWAY: wauzeway
-    GROQ_API_KEY: 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
+    GROQ_API_KEY: ""          # set via --set or a Kubernetes Secret; do not hardcode
     APISIX_UPSTREAM_URI: /wauzeway
 
 etcd:
